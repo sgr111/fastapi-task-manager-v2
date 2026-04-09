@@ -3,9 +3,18 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
+
+def get_database_url() -> str:
+    """Fix Railway's postgres:// URL to work with asyncpg."""
+    url = settings.DATABASE_URL
+    url = url.replace("postgres://", "postgresql+asyncpg://")
+    url = url.replace("postgresql://", "postgresql+asyncpg://")
+    return url
+
+
 # Async engine — works with asyncpg (PostgreSQL)
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    get_database_url(),
     echo=settings.DEBUG,
 )
 
