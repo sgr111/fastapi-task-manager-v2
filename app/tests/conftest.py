@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db.session import Base, get_db
 from app.main import app
+from app.core.limiter import limiter
 
-# Use async SQLite for tests (no PostgreSQL needed for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 
 test_engine = create_async_engine(TEST_DATABASE_URL)
@@ -37,10 +37,15 @@ async def client(db_session):
     async def override_get_db():
         yield db_session
 
+    # Disable rate limiting during tests
     app.dependency_overrides[get_db] = override_get_db
+    limiter.enabled = False
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
     app.dependency_overrides.clear()
+    limiter.enabled = True
 
 
 @pytest_asyncio.fixture
