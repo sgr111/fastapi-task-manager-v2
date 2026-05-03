@@ -1,6 +1,6 @@
 # FastAPI Task Manager
 
-A production-grade REST API built with **FastAPI**, **async SQLAlchemy 2.0**, **PostgreSQL**, **JWT Authentication**, and **Pytest** — deployed live on Railway.
+A production-grade REST API built with **FastAPI**, **async SQLAlchemy 2.0**, **PostgreSQL**, **JWT Authentication**, **Rate Limiting**, and **Pytest** — deployed live on Railway.
 
 🔗 **Live API:** https://glistening-flexibility-production.up.railway.app  
 📖 **Swagger UI:** https://glistening-flexibility-production.up.railway.app/docs
@@ -17,6 +17,7 @@ A production-grade REST API built with **FastAPI**, **async SQLAlchemy 2.0**, **
 | Validation | Pydantic v2 |
 | Auth | JWT (python-jose + bcrypt) |
 | Migrations | Alembic |
+| Rate Limiting | slowapi |
 | Testing | Pytest + HTTPX (async) |
 | CI/CD | GitHub Actions |
 | Deployment | Railway |
@@ -35,6 +36,7 @@ app/
 │   └── router.py           # Aggregates all routers
 ├── core/
 │   ├── config.py           # Settings via pydantic-settings
+│   ├── limiter.py          # slowapi rate limiter instance
 │   └── security.py         # JWT + bcrypt password hashing
 ├── db/
 │   └── session.py          # Async engine + get_db()
@@ -50,8 +52,11 @@ app/
 ├── tests/
 │   ├── conftest.py         # Async fixtures + aiosqlite test DB
 │   ├── test_auth.py        # Auth endpoint tests
-│   └── test_tasks.py       # Task CRUD tests
-└── main.py                 # App factory + startup
+│   ├── test_tasks.py       # Task CRUD tests
+│   └── test_rate_limiting.py  # Rate limiting integration tests
+├── main.py                 # App factory + startup
+test_live_api.py            # E2E tests against live Railway URL
+test_ratelimit.py           # Smoke test for rate limiting
 ```
 
 ---
@@ -60,8 +65,9 @@ app/
 
 - **Async throughout** — async SQLAlchemy 2.0, asyncpg, async Pytest
 - **JWT Authentication** — register, login, protected routes
+- **Rate Limiting** — slowapi: 5/min on register, 10/min on login, 30/min on task endpoints
 - **Alembic migrations** — full schema version control
-- **14 automated tests** — 100% pass rate, zero warnings
+- **16 automated tests** — 100% pass rate, zero warnings
 - **GitHub Actions CI/CD** — tests run on every push and PR
 - **Live deployment** — auto-deploys from GitHub to Railway
 
@@ -69,16 +75,16 @@ app/
 
 ## API Endpoints
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/health` | No | Health check |
-| POST | `/api/v1/auth/register` | No | Register new user |
-| POST | `/api/v1/auth/login` | No | Login, get JWT token |
-| GET | `/api/v1/tasks/` | Yes | List your tasks |
-| POST | `/api/v1/tasks/` | Yes | Create a task |
-| GET | `/api/v1/tasks/{id}` | Yes | Get task by ID |
-| PUT | `/api/v1/tasks/{id}` | Yes | Update a task |
-| DELETE | `/api/v1/tasks/{id}` | Yes | Delete a task |
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| GET | `/health` | No | None | Health check |
+| POST | `/api/v1/auth/register` | No | 5/min | Register new user |
+| POST | `/api/v1/auth/login` | No | 10/min | Login, get JWT token |
+| GET | `/api/v1/tasks/` | Yes | 30/min | List your tasks |
+| POST | `/api/v1/tasks/` | Yes | 20/min | Create a task |
+| GET | `/api/v1/tasks/{id}` | Yes | 30/min | Get task by ID |
+| PUT | `/api/v1/tasks/{id}` | Yes | 20/min | Update a task |
+| DELETE | `/api/v1/tasks/{id}` | Yes | 20/min | Delete a task |
 
 ---
 
@@ -115,15 +121,23 @@ Swagger UI: `http://localhost:8000/docs`
 
 ## Running Tests
 
-Tests use an in-memory SQLite database — no PostgreSQL needed.
-
+### Integration tests (no internet needed — uses SQLite in memory):
 ```bash
 pytest -v
 ```
 
 Expected output:
 ```
-14 passed in ~13s
+16 passed in ~13s
+```
+
+### E2E tests against live Railway URL:
+```bash
+# Smoke test — verifies rate limiting on live API
+python test_ratelimit.py
+
+# Full E2E test suite using pytest
+pytest test_live_api.py -v
 ```
 
 ---
@@ -134,6 +148,7 @@ Expected output:
 2. **Login** → `POST /api/v1/auth/login` → copy `access_token`
 3. **Add token** → Auth header: `Bearer <token>`
 4. **Use task endpoints** freely
+5. **Test rate limiting** → hit `/register` 6 times in 1 minute → 6th returns `429 Too Many Requests`
 
 ---
 
@@ -156,4 +171,5 @@ This project is deployed on Railway with:
 | passlib crypt | Direct bcrypt (no deprecation warnings) |
 | SQLite only | PostgreSQL with asyncpg |
 | Manual DB setup | Alembic migrations |
+| No rate limiting | slowapi rate limiting per IP |
 | No deployment | Live on Railway |
